@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>⚙️ General</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.qn.tabguard.settingschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.qn.tabguard</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>label</key>
+			<string>Enable TabGuard</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>🔔 Banner</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.qn.tabguard.settingschanged</string>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<true/>
+			<key>defaults</key>
+			<string>com.qn.tabguard</string>
+			<key>key</key>
+			<string>showBlockedBanner</string>
+			<key>label</key>
+			<string>Show Banner for Blocked Sites</string>
+		</dict>
+		<dict>
+			<key>PostNotification</key>
+			<string>com.qn.tabguard.settingschanged</string>
+			<key>cell</key>
+			<string>PSEditTextCell</string>
+			<key>default</key>
+			<string>6</string>
+			<key>defaults</key>
+			<string>com.qn.tabguard</string>
+			<key>isNumeric</key>
+			<true/>
+			<key>key</key>
+			<string>bannerDuration</string>
+			<key>keyboard</key>
+			<string>numbers</string>
+			<key>label</key>
+			<string>Banner Duration (s)</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Pop-ups are always allowed on these sites, and when they open these sites (e.g. a Google sign-in pop-up).
+
+example.com only matches example.com.
+*.example.com also matches m.example.com, ads.example.com…</string>
+			<key>label</key>
+			<string>✅ Whitelisted Domains</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>launchAllowedDomainOptions</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>label</key>
+			<string>Specify Whitelisted Domains...</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Pop-ups on these sites, or opening these sites, are blocked without asking.
+
+example.com only matches example.com.
+*.example.com also matches m.example.com, ads.example.com…</string>
+			<key>label</key>
+			<string>🚫 Blocked Domains</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>launchBlockedDomainOptions</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>label</key>
+			<string>Specify Blocked Domains...</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Blocks pop-ups on pages, or pop-up links, that start with an entry.
+
+example.com/videos/ blocks pop-ups on example.com/videos/abc.html
+bit.ly/abc123 blocks every pop-up opening bit.ly/abc123
+
+https:// and www. can be left out.</string>
+			<key>label</key>
+			<string>🔗 Blocked URLs</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>launchBlockedURLOptions</string>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>label</key>
+			<string>Specify Blocked URLs...</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>🛠️ Tools</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>exportSettingsTapped:</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Export Settings</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>importSettingsTapped:</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Import Settings</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>resetSettingsTapped:</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>confirmation</key>
+			<dict>
+				<key>cancelTitle</key>
+				<string>Cancel</string>
+				<key>prompt</key>
+				<string>All of your TabGuard settings will be cleared. Are you sure?</string>
+				<key>title</key>
+				<string>Yes, do it</string>
+			</dict>
+			<key>label</key>
+			<string>Reset Settings</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>Original idea by P2KDev
+© 2026 Qn (Đạt Nguyễn)</string>
+			<key>label</key>
+			<string>💻 Source Code</string>
+		</dict>
+		<dict>
+			<key>action</key>
+			<string>visitGitHub</string>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>GitHub</string>
+		</dict>
+	</array>
+	<key>title</key>
+	<string>TabGuard</string>
+</dict>
+</plist>
