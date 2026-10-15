@@ -4,7 +4,7 @@
 #import <UIKit/UIKit.h>
 
 @interface BrowserController : NSObject
-- (void)loadURLInNewTab:(NSURL*)url inBackground:(BOOL)inBackground animated:(BOOL)animated;
+- (id)loadURLInNewTab:(NSURL*)url inBackground:(BOOL)inBackground animated:(BOOL)animated;
 @end
 
 #define SBLog(fmt, ...) NSLog(@"[TabGuard] " fmt, ##__VA_ARGS__)
@@ -305,14 +305,16 @@ static UIViewController* rootViewControllerForWebView(WKWebView* webView)
 
 - (void)contextMenuInteraction:(UIContextMenuInteraction*)interaction willDisplayMenuForConfiguration:(UIContextMenuConfiguration*)configuration animator:(id<UIContextMenuInteractionAnimating>)animator
 {
-  [super contextMenuInteraction:interaction willDisplayMenuForConfiguration:configuration animator:animator];
+  if ([UIButton instancesRespondToSelector:_cmd])
+    [super contextMenuInteraction:interaction willDisplayMenuForConfiguration:configuration animator:animator];
   if (self.menuVisibilityChanged)
     self.menuVisibilityChanged(YES);
 }
 
 - (void)contextMenuInteraction:(UIContextMenuInteraction*)interaction willEndForConfiguration:(UIContextMenuConfiguration*)configuration animator:(id<UIContextMenuInteractionAnimating>)animator
 {
-  [super contextMenuInteraction:interaction willEndForConfiguration:configuration animator:animator];
+  if ([UIButton instancesRespondToSelector:_cmd])
+    [super contextMenuInteraction:interaction willEndForConfiguration:configuration animator:animator];
   if (self.menuVisibilityChanged)
     self.menuVisibilityChanged(NO);
 }
@@ -485,8 +487,9 @@ static CGFloat bottomBarsTop(UIView* host)
   self.moreButton = [SBMenuButton buttonWithType:UIButtonTypeSystem];
   [self.moreButton setImage:[UIImage systemImageNamed:@"ellipsis.circle"] forState:UIControlStateNormal];
   self.moreButton.showsMenuAsPrimaryAction = YES;
-  //Keep the order as written, otherwise iOS reverses it when the menu opens upwards
-  self.moreButton.preferredMenuElementOrder = UIContextMenuConfigurationElementOrderFixed;
+  //Keep the order as written, otherwise iOS reverses it when the menu opens upwards (iOS 16+, iOS 15 reverses it)
+  if (@available(iOS 16.0, *))
+    self.moreButton.preferredMenuElementOrder = UIContextMenuConfigurationElementOrderFixed;
   [self.moreButton setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
   [self.moreButton setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
   self.moreButton.menuVisibilityChanged = ^(BOOL visible) {
