@@ -1,9 +1,8 @@
 Package: com.qn.tabguard
 Name: TabGuard
-Depends: mobilesubstrate, preferenceloader, firmware (>= 16.0)
-Conflicts: com.p2kdev.safariblocker
+Depends: mobilesubstrate, preferenceloader, firmware (>= 15.0)
 Replaces: com.p2kdev.safariblocker
-Version: 1.0.0
+Version: 1.1.0
 Architecture: iphoneos-arm
 Description: Control pop-ups and new tabs in Safari
 Maintainer: Qn
