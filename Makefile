@@ -5,7 +5,7 @@ ARCHS= arm64 arm64e
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = TabGuard
-TabGuard_FILES = Tweak.xm
+TabGuard_FILES = Tweak.xm TGPrefs.m TGPopupRequest.m TGPopupBanner.m TGDelegateHook.m
 TabGuard_FRAMEWORKS = WebKit
 TabGuard_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 
