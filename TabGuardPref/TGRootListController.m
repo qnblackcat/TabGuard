@@ -2,6 +2,7 @@
 #import <Preferences/PSListController.h>
 #include <objc/runtime.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import "../TGPrefsShared.h"
 
 @interface PSTextFieldSpecifier : PSSpecifier
 	-(void)setPlaceholder:(NSString *)placeholder;
@@ -21,12 +22,30 @@
 
 @interface TGListController : PSListController
 	@property (nonatomic,retain) NSMutableArray *dataList;
-	@property (nonatomic,assign) NSString *dataListKey;
+	@property (nonatomic,copy) NSString *dataListKey;
+	@property (nonatomic,strong) UIToolbar *keyboardToolbar;
 	-(void)updateDataToPrefsFile;
-	-(id)initForType:(int)type;
+	-(id)initWithListKey:(NSString *)key;
 @end
 
 NSString *prefFilePath;
+
+static void presentAlert(UIViewController *controller, NSString *title, NSString *message)
+{
+	UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+	[controller presentViewController:alert animated:YES completion:nil];
+}
+
+static NSString *listTitle(NSString *key)
+{
+	return @{@"allowedDomains": @"Whitelisted Domains", @"blockedDomains": @"Blocked Domains", @"blockedURLs": @"Blocked URLs"}[key];
+}
+
+static NSString *entryPlaceholder(NSString *key)
+{
+	return [key isEqualToString:@"blockedURLs"] ? @"example.com/videos/" : @"example.com or *.example.com";
+}
 
 @implementation TGRootListController
 
@@ -35,12 +54,10 @@ NSString *prefFilePath;
 	self = [super init];
 	//Settings live in Safari's container, the tweak reads them from inside Safari's sandbox
 	NSString *safariPreferences = [[[[objc_getClass("LSApplicationProxy") applicationProxyForIdentifier:@"com.apple.mobilesafari"] containerURL] path] stringByAppendingPathComponent:@"Library/Preferences"];
-	prefFilePath = [safariPreferences stringByAppendingPathComponent:@"com.qn.tabguard.plist"];
+	prefFilePath = TGPrefFilePathInDirectory(safariPreferences);
 
-	//TabGuard was SafariBlocker, keep the user's lists and settings if Settings is opened before Safari
-	NSString *oldPath = [safariPreferences stringByAppendingPathComponent:@"com.p2kdev.safariblocker.plist"];
-	if (![[NSFileManager defaultManager] fileExistsAtPath:prefFilePath] && [[NSFileManager defaultManager] fileExistsAtPath:oldPath])
-		[[NSFileManager defaultManager] copyItemAtPath:oldPath toPath:prefFilePath error:nil];
+	//Keep the user's lists and settings if Settings is opened before Safari
+	TGMigrateSafariBlockerPrefs(safariPreferences);
 	return self;
 }
 
@@ -54,55 +71,35 @@ NSString *prefFilePath;
 }
 
 - (void)launchAllowedDomainOptions {
-	[self pushController:[[TGListController alloc] initForType:1] animate:YES];
+	[self pushController:[[TGListController alloc] initWithListKey:@"allowedDomains"] animate:YES];
 }
 
 - (void)launchBlockedDomainOptions {
-	[self pushController:[[TGListController alloc] initForType:2] animate:YES];
+	[self pushController:[[TGListController alloc] initWithListKey:@"blockedDomains"] animate:YES];
 }
 
 - (void)launchBlockedURLOptions {
-	[self pushController:[[TGListController alloc] initForType:3] animate:YES];
+	[self pushController:[[TGListController alloc] initWithListKey:@"blockedURLs"] animate:YES];
 }
 
 -(id)readPreferenceValue:(PSSpecifier*)specifier {
-    NSDictionary *tweakSettings = [NSDictionary dictionaryWithContentsOfFile:prefFilePath];
-
-		NSString *key = [specifier propertyForKey:@"key"];
-		id defaultValue = [specifier propertyForKey:@"default"];
-		id plistValue = [tweakSettings objectForKey:key];
-
-		if (!plistValue) plistValue = defaultValue;
-
-    return plistValue;
+	return TGLoadPrefs(prefFilePath)[[specifier propertyForKey:@"key"]] ?: [specifier propertyForKey:@"default"];
 }
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier*)specifier {
+	NSMutableDictionary *prefs = TGLoadPrefs(prefFilePath);
+	[prefs setValue:value forKey:[specifier propertyForKey:@"key"]];
+	TGSavePrefs(prefs, prefFilePath);
 
-		NSMutableDictionary *defaults = [NSMutableDictionary dictionary];
-		[defaults addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:prefFilePath]];
-
-		NSString *newKey = [specifier propertyForKey:@"key"];
-		id specifierValue = value;
-		[defaults setObject:specifierValue forKey:newKey];
-		[defaults writeToFile:prefFilePath atomically:YES];
-
-		CFStringRef toPost = (__bridge CFStringRef)specifier.properties[@"PostNotification"];
-		if(toPost) CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), toPost, NULL, NULL, YES);
-}
-
-- (void)showMessage:(NSString *)message title:(NSString *)title
-{
-	UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-	[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-	[self presentViewController:alert animated:YES completion:nil];
+	CFStringRef toPost = (__bridge CFStringRef)specifier.properties[@"PostNotification"];
+	if(toPost) CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), toPost, NULL, NULL, YES);
 }
 
 //Writes every setting (switches, banner duration, all three lists) and tells Safari to reload them
 - (void)replaceAllPreferences:(NSDictionary *)preferences
 {
-	[preferences writeToFile:prefFilePath atomically:YES];
-	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.qn.tabguard.settingschanged"), NULL, NULL, YES);
+	TGSavePrefs(preferences, prefFilePath);
+	TGPostSettingsChanged();
 	[self reloadSpecifiers];
 }
 
@@ -111,7 +108,7 @@ NSString *prefFilePath;
 {
 	NSDictionary *backup = @{
 		@"TabGuardBackup": @1,
-		@"preferences": [NSDictionary dictionaryWithContentsOfFile:prefFilePath] ?: @{}
+		@"preferences": TGLoadPrefs(prefFilePath)
 	};
 
 	NSError *error = nil;
@@ -119,7 +116,7 @@ NSString *prefFilePath;
 	NSURL *url = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:@"TabGuardBackup.plist"]];
 	if (data == nil || ![data writeToURL:url options:NSDataWritingAtomic error:&error])
 	{
-		[self showMessage:error.localizedDescription title:@"Export Failed"];
+		presentAlert(self, @"Export Failed", error.localizedDescription);
 		return;
 	}
 
@@ -142,23 +139,19 @@ NSString *prefFilePath;
 	id backup = data ? [NSPropertyListSerialization propertyListWithData:data options:NSPropertyListImmutable format:NULL error:NULL] : nil;
 	NSDictionary *values = [backup isKindOfClass:[NSDictionary class]] ? backup[@"preferences"] : nil;
 
-	UIAlertController *alert;
-	if (backup[@"TabGuardBackup"] == nil || ![values isKindOfClass:[NSDictionary class]])
-	{
-		alert = [UIAlertController alertControllerWithTitle:@"Import Failed" message:@"This file isn't a TabGuard backup." preferredStyle:UIAlertControllerStyleAlert];
-		[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-	}
-	else
-	{
-		alert = [UIAlertController alertControllerWithTitle:@"Import Settings" message:@"All of your current TabGuard settings will be replaced by this backup. Are you sure?" preferredStyle:UIAlertControllerStyleAlert];
+	//The picker may still be dismissing, so present once it's gone
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (backup[@"TabGuardBackup"] == nil || ![values isKindOfClass:[NSDictionary class]])
+		{
+			presentAlert(self, @"Import Failed", @"This file isn't a TabGuard backup.");
+			return;
+		}
+
+		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import Settings" message:@"All of your current TabGuard settings will be replaced by this backup. Are you sure?" preferredStyle:UIAlertControllerStyleAlert];
 		[alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 		[alert addAction:[UIAlertAction actionWithTitle:@"Import" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
 			[self replaceAllPreferences:values];
 		}]];
-	}
-
-	//The picker may still be dismissing, so present once it's gone
-	dispatch_async(dispatch_get_main_queue(), ^{
 		[self presentViewController:alert animated:YES completion:nil];
 	});
 }
@@ -177,21 +170,13 @@ NSString *prefFilePath;
 
 @implementation TGListController
 
-- (id)initForType:(int)type
+- (id)initWithListKey:(NSString *)key
 {
 	self = [super init];
 	if (self) {
-
 		self.dataList = [[NSMutableArray alloc] init];
-		if (type == 1)
-			self.dataListKey = @"allowedDomains";
-		else if (type == 2)
-			self.dataListKey = @"blockedDomains";
-		else if (type == 3)
-			self.dataListKey = @"blockedURLs";
-
-		NSDictionary *titles = @{@"allowedDomains": @"Whitelisted Domains", @"blockedDomains": @"Blocked Domains", @"blockedURLs": @"Blocked URLs"};
-		self.title = titles[self.dataListKey];
+		self.dataListKey = key;
+		self.title = listTitle(key);
 	}
 	return self;
 }
@@ -211,39 +196,24 @@ NSString *prefFilePath;
 - (NSString *)cleanedEntry:(NSString *)input
 {
 	NSString *entry = [input stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+	if (![self isDomainList])
+		return TGStripSchemeAndWWW(entry);
 
-	if ([self isDomainList])
-	{
-		BOOL wildcard = [entry hasPrefix:@"*."];
-		if (wildcard)
-			entry = [entry substringFromIndex:2];
+	BOOL wildcard = [entry hasPrefix:@"*."];
+	if (wildcard)
+		entry = [entry substringFromIndex:2];
 
-		NSURL *url = [NSURL URLWithString:([entry containsString:@"://"] ? entry : [@"https://" stringByAppendingString:entry])];
-		entry = url.host.lowercaseString ?: entry.lowercaseString;
-		if ([entry hasPrefix:@"www."])
-			entry = [entry substringFromIndex:4];
+	NSURL *url = [NSURL URLWithString:([entry containsString:@"://"] ? entry : [@"https://" stringByAppendingString:entry])];
+	entry = TGStripSchemeAndWWW(url.host.lowercaseString ?: entry.lowercaseString);
 
-		return (wildcard && entry.length) ? [@"*." stringByAppendingString:entry] : entry;
-	}
-
-	for (NSString *prefix in @[@"https://", @"http://"])
-	{
-		if ([entry.lowercaseString hasPrefix:prefix])
-		{
-			entry = [entry substringFromIndex:prefix.length];
-			break;
-		}
-	}
-	if ([entry.lowercaseString hasPrefix:@"www."])
-		entry = [entry substringFromIndex:4];
-	return entry;
+	return (wildcard && entry.length) ? [@"*." stringByAppendingString:entry] : entry;
 }
 
 - (void)addEntryTapped
 {
 	UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Entry" message:nil preferredStyle:UIAlertControllerStyleAlert];
 	[alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-		textField.placeholder = [self isDomainList] ? @"example.com or *.example.com" : @"example.com/videos/";
+		textField.placeholder = entryPlaceholder(self.dataListKey);
 		textField.keyboardType = UIKeyboardTypeURL;
 		textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
 		textField.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -255,62 +225,59 @@ NSString *prefFilePath;
 	[self presentViewController:alert animated:YES completion:nil];
 }
 
+//Why entry can't be in the list, nil when it can. The entry at ignoredIndex is the one being edited.
+- (NSString *)problemWithEntry:(NSString *)entry ignoringIndex:(NSInteger)ignoredIndex
+{
+	if (entry.length == 0)
+		return @"The entry is empty.";
+	if ([entry containsString:@";"])
+		return @"Entries can't contain \";\".";
+
+	NSUInteger existing = [self.dataList indexOfObject:entry];
+	if (existing != NSNotFound && (NSInteger)existing != ignoredIndex)
+		return [NSString stringWithFormat:@"%@ is already in the list.", entry];
+	return nil;
+}
+
+//A domain lives in one list only, adding it here takes it off the other domain list
+- (void)moveEntryFromOtherList:(NSString *)entry
+{
+	NSMutableDictionary *prefs = TGLoadPrefs(prefFilePath);
+	NSString *movedFromKey = TGRemoveFromOtherDomainList(prefs, self.dataListKey, entry);
+	if (!movedFromKey)
+		return;
+
+	TGSavePrefs(prefs, prefFilePath);
+	presentAlert(self, nil, [NSString stringWithFormat:@"Moved %@ from %@.", entry, listTitle(movedFromKey)]);
+}
+
 - (void)addEntry:(NSString *)input
 {
 	NSString *entry = [self cleanedEntry:input];
 
-	NSString *problem = nil;
-	if (entry.length == 0)
-		problem = @"The entry is empty.";
-	else if ([entry containsString:@";"])
-		problem = @"Entries can't contain \";\".";
-	else if ([self.dataList containsObject:entry])
-		problem = [NSString stringWithFormat:@"%@ is already in the list.", entry];
-
+	NSString *problem = [self problemWithEntry:entry ignoringIndex:-1];
 	if (problem)
 	{
-		UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Couldn't Add Entry" message:problem preferredStyle:UIAlertControllerStyleAlert];
-		[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-		[self presentViewController:alert animated:YES completion:nil];
+		presentAlert(self, @"Couldn't Add Entry", problem);
 		return;
 	}
 
-	//A domain lives in one list only, adding it here takes it off the other domain list
-	NSString *movedFrom = [self removeFromOtherDomainList:entry];
-
+	[self moveEntryFromOtherList:entry];
 	[self.dataList addObject:entry];
-	[self updateDataToPrefsFile];
-	[self reloadSpecifiers];
-	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.qn.tabguard.settingschanged"), NULL, NULL, YES);
-
-	if (movedFrom)
-	{
-		UIAlertController *alert = [UIAlertController alertControllerWithTitle:nil message:[NSString stringWithFormat:@"Moved %@ from %@.", entry, movedFrom] preferredStyle:UIAlertControllerStyleAlert];
-		[alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-		[self presentViewController:alert animated:YES completion:nil];
-	}
+	[self saveAndReload];
 }
 
-//Returns the other list's title when the entry was removed from it
-- (NSString *)removeFromOtherDomainList:(NSString *)entry
+- (void)saveAndReload
 {
-	NSString *otherKey = [self.dataListKey isEqualToString:@"allowedDomains"] ? @"blockedDomains" : ([self.dataListKey isEqualToString:@"blockedDomains"] ? @"allowedDomains" : nil);
-	if (!otherKey)
-		return nil;
+	[self updateDataToPrefsFile];
+	[self reloadSpecifiers];
+	TGPostSettingsChanged();
+}
 
-	NSMutableDictionary *prefs = [NSMutableDictionary dictionary];
-	[prefs addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:prefFilePath]];
-	id value = prefs[otherKey];
-	NSMutableArray *otherList = [([value isKindOfClass:[NSString class]] ? [value componentsSeparatedByString:@";"] : @[]) mutableCopy];
-	if (![otherList containsObject:entry])
-		return nil;
-
-	[otherList removeObject:entry];
-	[otherList removeObject:@""];
-	prefs[otherKey] = [otherList componentsJoinedByString:@";"];
-	[prefs writeToFile:prefFilePath atomically:YES];
-
-	return [otherKey isEqualToString:@"allowedDomains"] ? @"Whitelisted Domains" : @"Blocked Domains";
+//Rows are keyed "#1", "#2"... and follow the order of dataList
+- (NSInteger)entryIndexForSpecifier:(PSSpecifier *)specifier
+{
+	return [[[specifier propertyForKey:@"key"] substringFromIndex:1] integerValue] - 1;
 }
 
 - (NSArray *)specifiers {
@@ -318,37 +285,22 @@ NSString *prefFilePath;
 
 		_specifiers = [[NSMutableArray alloc] init];
 
-		NSMutableDictionary *tweakSettings = [[NSMutableDictionary alloc] initWithContentsOfFile:prefFilePath];
-		id plistValue = [tweakSettings objectForKey:self.dataListKey];
+		self.dataList = TGListFromPrefs(TGLoadPrefs(prefFilePath), self.dataListKey);
 
-		if (plistValue)
+		for (NSUInteger i = 0; i < self.dataList.count; i++)
 		{
-			int index = 1;
-			self.dataList = [[plistValue componentsSeparatedByString:@";"] mutableCopy];
-			//Blank entries would shift the row numbers away from the list indexes used for editing and deleting
-			[self.dataList removeObject:@""];
-
-			for (NSString *currData in self.dataList)
-			{
-				if ([currData length] == 0)
-					continue;
-
-				NSString *newDataLabel = [NSString stringWithFormat:@"#%d",index];
-				PSTextFieldSpecifier  *newData = [PSTextFieldSpecifier preferenceSpecifierNamed:newDataLabel
-																										target:self
-																										set:@selector(setPreferenceValue:specifier:)
-																										get:@selector(readPreferenceValue:)
-																										detail:Nil
-																										cell:PSEditTextCell
-																										edit:Nil];
-				[newData setProperty:newDataLabel forKey:@"key"];
-				[newData setProperty:@"com.qn.tabguard.settingschanged" forKey:@"PostNotification"];
-				[newData setProperty:@YES forKey:@"enabled"];
-				[newData setPlaceholder:[self isDomainList] ? @"example.com or *.example.com" : @"example.com/videos/"];
-				[_specifiers addObject:newData];
-
-				index++;
-			}
+			NSString *label = [NSString stringWithFormat:@"#%lu", (unsigned long)i + 1];
+			PSTextFieldSpecifier  *newData = [PSTextFieldSpecifier preferenceSpecifierNamed:label
+																									target:self
+																									set:@selector(setPreferenceValue:specifier:)
+																									get:@selector(readPreferenceValue:)
+																									detail:Nil
+																									cell:PSEditTextCell
+																									edit:Nil];
+			[newData setProperty:label forKey:@"key"];
+			[newData setProperty:@YES forKey:@"enabled"];
+			[newData setPlaceholder:entryPlaceholder(self.dataListKey)];
+			[_specifiers addObject:newData];
 		}
 	}
 
@@ -363,21 +315,16 @@ NSString *prefFilePath;
 	if ([cell isKindOfClass:objc_getClass("PSEditableTableCell")])
 	{
 		PSEditableTableCell *editableCell = (PSEditableTableCell *)cell;
-		if (editableCell.textField)
+		if (!self.keyboardToolbar)
 		{
-			UIToolbar *keyboardDoneButtonView = [[UIToolbar alloc] init];
-			[keyboardDoneButtonView sizeToFit];
-			UIBarButtonItem *flexBarButton = [[UIBarButtonItem alloc]
-			    initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
-			    target:self action:nil];
-
-			UIBarButtonItem *doneBarButton = [[UIBarButtonItem alloc]
-			    initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-			    target:self action:@selector(doneClicked:)];
-
-			keyboardDoneButtonView.items = [NSArray arrayWithObjects:flexBarButton,doneBarButton,nil];
-	    ((UITextField *)editableCell.textField).inputAccessoryView = keyboardDoneButtonView;
+			self.keyboardToolbar = [[UIToolbar alloc] init];
+			[self.keyboardToolbar sizeToFit];
+			self.keyboardToolbar.items = @[
+				[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
+				[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(doneClicked:)]
+			];
 		}
+		editableCell.textField.inputAccessoryView = self.keyboardToolbar;
 	}
 
 	return cell;
@@ -385,7 +332,7 @@ NSString *prefFilePath;
 
 - (IBAction)doneClicked:(id)sender
 {
-    [self.view endEditing:YES];
+	[self.view endEditing:YES];
 }
 
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
@@ -397,55 +344,47 @@ NSString *prefFilePath;
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
 {
 	[self.dataList removeObjectAtIndex:indexPath.row];
-	[self updateDataToPrefsFile];
-	[self reloadSpecifiers];
-	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.qn.tabguard.settingschanged"), NULL, NULL, YES);
+	[self saveAndReload];
 }
 
 - (id)readPreferenceValue:(PSSpecifier*)specifier {
-
-	id plistValue = nil;
-	NSString *key = [specifier propertyForKey:@"key"];
-	if ([key hasPrefix:@"#"])
-	{
-		key = [key stringByReplacingOccurrencesOfString:@"#"	withString:@""];
-		int objectIndex = [key integerValue]-1;
-		if ([self.dataList count] > objectIndex)
-			plistValue = [self.dataList objectAtIndex:[key integerValue]-1];
-	}
-
-	return plistValue;
+	NSInteger index = [self entryIndexForSpecifier:specifier];
+	return index < (NSInteger)self.dataList.count ? self.dataList[index] : nil;
 }
 
 -(void)updateDataToPrefsFile
 {
-	NSMutableDictionary *defaults = [NSMutableDictionary dictionary];
-	[defaults addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:prefFilePath]];
-	[defaults setObject:[self.dataList componentsJoinedByString:@";"] forKey:self.dataListKey];
-	[defaults writeToFile:prefFilePath atomically:YES];
+	NSMutableDictionary *prefs = TGLoadPrefs(prefFilePath);
+	TGStoreList(prefs, self.dataListKey, self.dataList);
+	TGSavePrefs(prefs, prefFilePath);
 }
 
+//An entry was edited in its text field, it gets the same cleaning and checks as a new entry
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier*)specifier {
+	NSInteger index = [self entryIndexForSpecifier:specifier];
+	if (index >= (NSInteger)self.dataList.count)
+		return;
 
-		NSMutableDictionary *defaults = [NSMutableDictionary dictionary];
-		[defaults addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:prefFilePath]];
+	NSString *input = [value isKindOfClass:[NSString class]] ? value : @"";
+	NSString *entry = [self cleanedEntry:input];
+	BOOL changed = ![entry isEqualToString:self.dataList[index]];
 
-		NSString *newKey = [specifier propertyForKey:@"key"];
-		id specifierValue = value;
-		if ([newKey hasPrefix:@"#"])
-		{
-			newKey = [newKey stringByReplacingOccurrencesOfString:@"#"	withString:@""];
+	NSString *problem = changed ? [self problemWithEntry:entry ignoringIndex:index] : nil;
+	if (problem)
+		presentAlert(self, @"Couldn't Change Entry", problem);
+	else if (changed)
+	{
+		[self moveEntryFromOtherList:entry];
+		self.dataList[index] = entry;
+		[self updateDataToPrefsFile];
+		TGPostSettingsChanged();
+	}
 
-			self.dataList[[newKey integerValue]-1] = specifierValue;
-			specifierValue = [self.dataList componentsJoinedByString:@";"];
-			newKey = self.dataListKey;
-		}
-
-		[defaults setObject:specifierValue forKey:newKey];
-		[defaults writeToFile:prefFilePath atomically:YES];
-
-		CFStringRef toPost = (__bridge CFStringRef)specifier.properties[@"PostNotification"];
-		if(toPost) CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), toPost, NULL, NULL, YES);
+	//Show what was actually saved: the cleaned entry, or the old one when the new text was refused
+	if (problem || ![entry isEqualToString:input])
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[self reloadSpecifiers];
+		});
 }
 
 @end

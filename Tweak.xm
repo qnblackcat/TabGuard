@@ -1,5 +1,6 @@
 #import "TGCommon.h"
 #import "TGPrefs.h"
+#import "TGPrefsShared.h"
 #import "TGDelegateHook.h"
 
 %hook WKWebView
@@ -16,10 +17,10 @@
 
 %ctor
 {
-  SBLog(@"loaded");
+  TGLog(@"loaded");
 
   migrateSafariBlockerPrefs();
-  CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)updatePrefs, CFSTR("com.qn.tabguard.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+  CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)updatePrefs, TGSettingsChangedNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
   updatePrefs();
 
   %init;

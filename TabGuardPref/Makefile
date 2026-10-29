@@ -1,10 +1,9 @@
 ARCHS= arm64 arm64e
 TARGET = iphone:clang:16.4:15.0
-THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 BUNDLE_NAME = TabGuard
-TabGuard_FILES = TGRootListController.m
+TabGuard_FILES = TGRootListController.m ../TGPrefsShared.m
 TabGuard_INSTALL_PATH = /Library/PreferenceBundles
 TabGuard_FRAMEWORKS = UIKit UniformTypeIdentifiers
 TabGuard_PRIVATE_FRAMEWORKS = Preferences

@@ -1,8 +1,5 @@
 #import "TGCommon.h"
 
-//Store the preferences in Safari Home Directory to avoid sandbox issues
-#define prefFilePath [NSString stringWithFormat:@"%@/Library/Preferences/com.qn.tabguard.plist", NSHomeDirectory()]
-
 TG_EXTERN NSMutableArray* blockedURLs;
 TG_EXTERN NSMutableArray* blockedDomains;
 TG_EXTERN NSMutableArray* allowedDomains;

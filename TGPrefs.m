@@ -1,4 +1,5 @@
 #import "TGPrefs.h"
+#import "TGPrefsShared.h"
 
 NSMutableArray* blockedURLs;
 NSMutableArray* blockedDomains;
@@ -7,52 +8,15 @@ bool tweakEnabled = YES;
 bool showBlockedBanner = YES;
 NSTimeInterval bannerDuration = 6;
 
-static NSMutableArray* listForKey(NSString* key)
+//Store the preferences in Safari Home Directory to avoid sandbox issues
+static NSString* prefsDirectory(void)
 {
-  if ([key isEqualToString:@"allowedDomains"])
-    return allowedDomains;
-  if ([key isEqualToString:@"blockedDomains"])
-    return blockedDomains;
-  if ([key isEqualToString:@"blockedURLs"])
-    return blockedURLs;
-  return nil;
+  return [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Preferences"];
 }
 
-//key is one of allowedDomains, blockedDomains, blockedURLs. A domain lives in one list only, adding it to the
-//whitelist takes it off the blocked domains and the other way around.
-void editTabGuardList(NSString* key, NSString* entry, BOOL add)
+static NSString* prefFilePath(void)
 {
-  NSMutableArray* list = listForKey(key);
-  if (!list || !entry || add == [list containsObject:entry])
-    return;
-
-  if (add)
-    [list addObject:entry];
-  else
-    [list removeObject:entry];
-
-  NSMutableDictionary *defaults = [NSMutableDictionary dictionary];
-  [defaults addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:prefFilePath]];
-  [defaults setObject:[list componentsJoinedByString:@";"] forKey:key];
-
-  NSString* otherKey = [key isEqualToString:@"allowedDomains"] ? @"blockedDomains" : ([key isEqualToString:@"blockedDomains"] ? @"allowedDomains" : nil);
-  NSMutableArray* otherList = listForKey(otherKey);
-  if (add && [otherList containsObject:entry])
-  {
-    [otherList removeObject:entry];
-    [defaults setObject:[otherList componentsJoinedByString:@";"] forKey:otherKey];
-  }
-
-  [defaults writeToFile:prefFilePath atomically:YES];
-}
-
-//Pref lists are stored as ";" separated strings, ignore anything that isn't a string
-static NSMutableArray* listPref(NSDictionary* prefs, NSString* key)
-{
-  id value = prefs[key];
-  NSMutableArray* list = [([value isKindOfClass:[NSString class]] ? [value componentsSeparatedByString:@";"] : @[]) mutableCopy];
-  [list removeObject:@""];
-  return list;
+  return TGPrefFilePathInDirectory(prefsDirectory());
 }
 
 //Sites with legitimate pop-ups (sign-in, payment, docs). Added to the user's whitelist once, so they
@@ -81,26 +45,23 @@ static void addDefaultAllowedDomainsOnce(NSMutableDictionary* prefs)
   if ([[prefs objectForKey:@"addedDefaultAllowedDomains"] boolValue])
     return;
 
-  NSMutableArray* domains = listPref(prefs, @"allowedDomains");
+  NSMutableArray* domains = TGListFromPrefs(prefs, @"allowedDomains");
   for (NSString* domain in defaultAllowedDomains())
   {
     if (![domains containsObject:domain])
       [domains addObject:domain];
   }
 
-  [prefs setObject:[domains componentsJoinedByString:@";"] forKey:@"allowedDomains"];
+  TGStoreList(prefs, @"allowedDomains", domains);
   [prefs setObject:@YES forKey:@"addedDefaultAllowedDomains"];
-  [prefs writeToFile:prefFilePath atomically:YES];
+  TGSavePrefs(prefs, prefFilePath());
 }
 
-void updatePrefs(void)
+static void applyPrefs(NSDictionary* prefs)
 {
-  NSMutableDictionary* prefs = [[NSMutableDictionary alloc] initWithContentsOfFile:prefFilePath] ?: [NSMutableDictionary dictionary];
-  addDefaultAllowedDomainsOnce(prefs);
-
-  allowedDomains = listPref(prefs, @"allowedDomains");
-  blockedDomains = listPref(prefs, @"blockedDomains");
-  blockedURLs = listPref(prefs, @"blockedURLs");
+  allowedDomains = TGListFromPrefs(prefs, @"allowedDomains");
+  blockedDomains = TGListFromPrefs(prefs, @"blockedDomains");
+  blockedURLs = TGListFromPrefs(prefs, @"blockedURLs");
 
   tweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
   showBlockedBanner = prefs[@"showBlockedBanner"] ? [prefs[@"showBlockedBanner"] boolValue] : YES;
@@ -108,11 +69,39 @@ void updatePrefs(void)
   bannerDuration = [duration respondsToSelector:@selector(doubleValue)] && [duration doubleValue] > 0 ? MIN(MAX([duration doubleValue], 1), 60) : 6;
 }
 
-//TabGuard was SafariBlocker (com.p2kdev.safariblocker), keep the user's lists and settings
+void updatePrefs(void)
+{
+  NSMutableDictionary* prefs = TGLoadPrefs(prefFilePath());
+  addDefaultAllowedDomainsOnce(prefs);
+  applyPrefs(prefs);
+}
+
+//key is one of allowedDomains, blockedDomains, blockedURLs. A domain lives in one list only, adding it to the
+//whitelist takes it off the blocked domains and the other way around.
+void editTabGuardList(NSString* key, NSString* entry, BOOL add)
+{
+  if (!entry || !TGIsListKey(key))
+    return;
+
+  NSMutableDictionary* prefs = TGLoadPrefs(prefFilePath());
+  NSMutableArray* list = TGListFromPrefs(prefs, key);
+  if (add == [list containsObject:entry])
+    return;
+
+  if (add)
+    [list addObject:entry];
+  else
+    [list removeObject:entry];
+  TGStoreList(prefs, key, list);
+
+  if (add)
+    TGRemoveFromOtherDomainList(prefs, key, entry);
+
+  TGSavePrefs(prefs, prefFilePath());
+  applyPrefs(prefs);
+}
+
 void migrateSafariBlockerPrefs(void)
 {
-  NSString* oldPath = [NSString stringWithFormat:@"%@/Library/Preferences/com.p2kdev.safariblocker.plist", NSHomeDirectory()];
-  NSFileManager* fileManager = [NSFileManager defaultManager];
-  if (![fileManager fileExistsAtPath:prefFilePath] && [fileManager fileExistsAtPath:oldPath])
-    [fileManager copyItemAtPath:oldPath toPath:prefFilePath error:nil];
+  TGMigrateSafariBlockerPrefs(prefsDirectory());
 }

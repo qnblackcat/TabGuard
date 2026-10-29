@@ -1,7 +1,7 @@
 #import "TGCommon.h"
 
 //Everything known about a pop-up at the moment WebKit asks Safari for a new window
-@interface SBPopupRequest : NSObject
+@interface TGPopupRequest : NSObject
 //The page in the tab that opens the pop-up
 @property (nonatomic, copy) NSString* pageDomain;
 @property (nonatomic, copy) NSString* pageURLWithoutJunk;
@@ -19,12 +19,12 @@
 @property (nonatomic, copy) NSString* blockingListKey;
 @end
 
-typedef NS_ENUM(NSInteger, SBPopupDecision)
+typedef NS_ENUM(NSInteger, TGPopupDecision)
 {
-  SBPopupAsk,
-  SBPopupAllow,
-  SBPopupBlocked
+  TGPopupAsk,
+  TGPopupAllow,
+  TGPopupBlocked
 };
 
-TG_EXTERN SBPopupRequest* popupRequestFor(WKWebView* webView, WKNavigationAction* action);
-TG_EXTERN SBPopupDecision decisionForPopup(SBPopupRequest* request);
+TG_EXTERN TGPopupRequest* popupRequestFor(WKWebView* webView, WKNavigationAction* action);
+TG_EXTERN TGPopupDecision decisionForPopup(TGPopupRequest* request);

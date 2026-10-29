@@ -15,7 +15,7 @@ static id valueForKeyIfResponds(id object, NSString* key)
   }
   @catch(NSException* ex)
   {
-    SBLog(@"valueForKey:%@ failed: %@", key, ex.reason);
+    TGLog(@"valueForKey:%@ failed: %@", key, ex.reason);
     return nil;
   }
 }
@@ -46,26 +46,26 @@ static BOOL shouldCreatePopup(id uiDelegate, WKWebView* webView, WKNavigationAct
   if (!tweakEnabled)
     return YES;
 
-  SBPopupRequest* request = popupRequestFor(webView, navigationAction);
-  SBPopupDecision decision = decisionForPopup(request);
+  TGPopupRequest* request = popupRequestFor(webView, navigationAction);
+  TGPopupDecision decision = decisionForPopup(request);
 
-  SBLog(@"pop-up page=%@ opener=%@ target=%@ decision=%ld", request.pageDomain, request.openerDomain, request.targetURL, (long)decision);
+  TGLog(@"pop-up page=%@ opener=%@ target=%@ decision=%ld", request.pageDomain, request.openerDomain, request.targetURL, (long)decision);
 
-  if (decision == SBPopupAllow)
+  if (decision == TGPopupAllow)
     return YES;
 
   UIViewController* rootVC = rootViewControllerForWebView(webView);
   id browserController = valueForKeyIfResponds(uiDelegate, @"browserController") ?: valueForKeyIfResponds(rootVC, @"browserController");
 
-  BOOL ask = decision == SBPopupAsk;
+  BOOL ask = decision == TGPopupAsk;
   if (!rootVC.view)
   {
-    SBLog(@"no view to show the banner in");
+    TGLog(@"no view to show the banner in");
     return ask;
   }
 
   if (ask || showBlockedBanner)
-    [SBPopupBanner showForRequest:request inViewController:rootVC browserController:browserController];
+    [TGPopupBanner showForRequest:request inViewController:rootVC browserController:browserController];
   return NO;
 }
 
@@ -76,8 +76,8 @@ static BOOL shouldCreatePopup(id uiDelegate, WKWebView* webView, WKNavigationAct
 //
 //Which class is the UI delegate differs between Safari versions, and WebKit prefers the private async
 //variant when the delegate has it, so both are hooked on whatever class Safari actually sets.
-typedef WKWebView* (*SBCreateWebViewIMP)(id, SEL, WKWebView*, WKWebViewConfiguration*, WKNavigationAction*, WKWindowFeatures*);
-typedef void (*SBCreateWebViewAsyncIMP)(id, SEL, WKWebView*, WKWebViewConfiguration*, WKNavigationAction*, WKWindowFeatures*, void (^)(WKWebView*));
+typedef WKWebView* (*TGCreateWebViewIMP)(id, SEL, WKWebView*, WKWebViewConfiguration*, WKNavigationAction*, WKWindowFeatures*);
+typedef void (*TGCreateWebViewAsyncIMP)(id, SEL, WKWebView*, WKWebViewConfiguration*, WKNavigationAction*, WKWindowFeatures*, void (^)(WKWebView*));
 
 static NSMutableSet<NSString*>* hookedMethods;
 
@@ -108,7 +108,7 @@ static Method methodToHook(Class cls, SEL sel)
     return NULL;
 
   [hookedMethods addObject:key];
-  SBLog(@"hooking -[%s %@]", class_getName(owner), NSStringFromSelector(sel));
+  TGLog(@"hooking -[%s %@]", class_getName(owner), NSStringFromSelector(sel));
   return class_getInstanceMethod(owner, sel);
 }
 
@@ -118,7 +118,7 @@ void hookUIDelegateClass(Class cls)
   Method syncMethod = methodToHook(cls, syncSel);
   if (syncMethod)
   {
-    SBCreateWebViewIMP orig = (SBCreateWebViewIMP)method_getImplementation(syncMethod);
+    TGCreateWebViewIMP orig = (TGCreateWebViewIMP)method_getImplementation(syncMethod);
     method_setImplementation(syncMethod, imp_implementationWithBlock(^WKWebView*(id delegate, WKWebView* webView, WKWebViewConfiguration* configuration, WKNavigationAction* navigationAction, WKWindowFeatures* windowFeatures) {
       if (!shouldCreatePopup(delegate, webView, navigationAction))
         return nil;
@@ -131,7 +131,7 @@ void hookUIDelegateClass(Class cls)
   Method asyncMethod = methodToHook(cls, asyncSel);
   if (asyncMethod)
   {
-    SBCreateWebViewAsyncIMP orig = (SBCreateWebViewAsyncIMP)method_getImplementation(asyncMethod);
+    TGCreateWebViewAsyncIMP orig = (TGCreateWebViewAsyncIMP)method_getImplementation(asyncMethod);
     method_setImplementation(asyncMethod, imp_implementationWithBlock(^(id delegate, WKWebView* webView, WKWebViewConfiguration* configuration, WKNavigationAction* navigationAction, WKWindowFeatures* windowFeatures, void (^completionHandler)(WKWebView*)) {
       if (!shouldCreatePopup(delegate, webView, navigationAction))
       {

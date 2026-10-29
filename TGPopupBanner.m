@@ -18,11 +18,11 @@ static void reopenPopup(id browserController, NSURL* targetURL)
 }
 
 //UIButton is its own context menu delegate, overriding these is how to know when the menu is up
-@interface SBMenuButton : UIButton
+@interface TGMenuButton : UIButton
 @property (nonatomic, copy) void (^menuVisibilityChanged)(BOOL visible);
 @end
 
-@implementation SBMenuButton
+@implementation TGMenuButton
 
 - (void)contextMenuInteraction:(UIContextMenuInteraction*)interaction willDisplayMenuForConfiguration:(UIContextMenuConfiguration*)configuration animator:(id<UIContextMenuInteractionAnimating>)animator
 {
@@ -42,21 +42,21 @@ static void reopenPopup(id browserController, NSURL* targetURL)
 
 @end
 
-@interface SBPopupBanner ()
+@interface TGPopupBanner ()
 @property (nonatomic, assign) NSInteger count;
-@property (nonatomic, strong) SBPopupRequest* latestRequest;
+@property (nonatomic, strong) TGPopupRequest* latestRequest;
 @property (nonatomic, weak) id browserController;
 @property (nonatomic, strong) UILabel* titleLabel;
 @property (nonatomic, strong) UILabel* subtitleLabel;
 @property (nonatomic, strong) UIButton* allowButton;
-@property (nonatomic, strong) SBMenuButton* moreButton;
+@property (nonatomic, strong) TGMenuButton* moreButton;
 @property (nonatomic, strong) UIVisualEffectView* background;
 @property (nonatomic, strong) NSLayoutConstraint* bottomConstraint;
 @property (nonatomic, strong) NSTimer* hideTimer;
 @property (nonatomic, assign) BOOL menuVisible;
 @end
 
-static __weak SBPopupBanner* visibleBanner;
+static __weak TGPopupBanner* visibleBanner;
 
 //Safari's bottom bars (toolbar, the iOS 15+ capsule address bar) have moved between classes and
 //properties across versions, so look for them by class name instead of private keys
@@ -70,7 +70,7 @@ static BOOL isBottomBarCandidate(UIView* view)
 
 static void collectBottomBars(UIView* view, UIView* host, NSInteger depth, CGFloat* limit, NSMutableArray<NSString*>* found)
 {
-  if (depth > 15 || view.hidden || view.alpha < 0.01 || [view isKindOfClass:[WKWebView class]] || [view isKindOfClass:[SBPopupBanner class]])
+  if (depth > 15 || view.hidden || view.alpha < 0.01 || [view isKindOfClass:[WKWebView class]] || [view isKindOfClass:[TGPopupBanner class]])
     return;
 
   if (isBottomBarCandidate(view))
@@ -93,16 +93,16 @@ static CGFloat bottomBarsTop(UIView* host)
   CGFloat limit = CGRectGetMaxY(host.bounds) - host.safeAreaInsets.bottom;
   NSMutableArray<NSString*>* found = [NSMutableArray array];
   collectBottomBars(host, host, 0, &limit, found);
-  SBLog(@"banner above y=%.0f, bottom bars: %@", limit, found.count ? [found componentsJoinedByString:@", "] : @"none");
+  TGLog(@"banner above y=%.0f, bottom bars: %@", limit, found.count ? [found componentsJoinedByString:@", "] : @"none");
   return limit;
 }
 
-@implementation SBPopupBanner
+@implementation TGPopupBanner
 
-+ (void)showForRequest:(SBPopupRequest*)request inViewController:(UIViewController*)rootVC browserController:(id)browserController
++ (void)showForRequest:(TGPopupRequest*)request inViewController:(UIViewController*)rootVC browserController:(id)browserController
 {
   UIView* host = rootVC.view;
-  SBPopupBanner* banner = visibleBanner;
+  TGPopupBanner* banner = visibleBanner;
   if (banner && banner.superview != host)
   {
     [banner removeFromSuperview];
@@ -114,7 +114,7 @@ static CGFloat bottomBarsTop(UIView* host)
   BOOL isNew = !banner;
   if (isNew)
   {
-    banner = [[SBPopupBanner alloc] initWithHost:host];
+    banner = [[TGPopupBanner alloc] initWithHost:host];
     visibleBanner = banner;
   }
 
@@ -176,8 +176,7 @@ static CGFloat bottomBarsTop(UIView* host)
   [icon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
   self.titleLabel = [UILabel new];
-  self.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-  self.titleLabel.font = [UIFont systemFontOfSize:self.titleLabel.font.pointSize weight:UIFontWeightSemibold];
+  self.titleLabel.font = [UIFont systemFontOfSize:[UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline].pointSize weight:UIFontWeightSemibold];
   self.subtitleLabel = [UILabel new];
   self.subtitleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
@@ -190,7 +189,7 @@ static CGFloat bottomBarsTop(UIView* host)
   [labels setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
   [labels setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-  __weak SBPopupBanner* weakSelf = self;
+  __weak TGPopupBanner* weakSelf = self;
 
   UIButtonConfiguration* allowConfig = [UIButtonConfiguration tintedButtonConfiguration];
   allowConfig.title = @"Allow Once";
@@ -202,7 +201,7 @@ static CGFloat bottomBarsTop(UIView* host)
   [self.allowButton setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
   [self.allowButton setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-  self.moreButton = [SBMenuButton buttonWithType:UIButtonTypeSystem];
+  self.moreButton = [TGMenuButton buttonWithType:UIButtonTypeSystem];
   [self.moreButton setImage:[UIImage systemImageNamed:@"ellipsis.circle"] forState:UIControlStateNormal];
   self.moreButton.showsMenuAsPrimaryAction = YES;
   //Keep the order as written, otherwise iOS reverses it when the menu opens upwards (iOS 16+, iOS 15 reverses it)
@@ -278,7 +277,7 @@ static CGFloat bottomBarsTop(UIView* host)
   //A blank pop-up only has content because the opener writes into it, there is nothing to open again
   self.allowButton.hidden = !self.latestRequest.targetURL;
 
-  __weak SBPopupBanner* weakSelf = self;
+  __weak TGPopupBanner* weakSelf = self;
 
   //Blocked by a list: offer to take that entry off the list, later pop-ups are asked about again
   NSString* entry = self.latestRequest.blockingEntry;
@@ -304,35 +303,24 @@ static CGFloat bottomBarsTop(UIView* host)
     [weakSelf allowOnce];
   }];
 
-  NSMutableArray<UIMenuElement*>* blockChoices = [NSMutableArray array];
-  UIAction* blockSite = [UIAction actionWithTitle:@"Whole Site" image:nil identifier:nil handler:^(UIAction* action) {
-    editTabGuardList(@"blockedDomains", domain, YES);
-    [weakSelf dismiss];
-  }];
-  [blockChoices addObject:blockSite];
+  UIAction* (^blockChoice)(NSString*, NSString*, NSString*) = ^UIAction*(NSString* title, NSString* key, NSString* blockedEntry) {
+    UIAction* choice = [UIAction actionWithTitle:title image:nil identifier:nil handler:^(UIAction* action) {
+      editTabGuardList(key, blockedEntry, YES);
+      [weakSelf dismiss];
+    }];
+    choice.attributes = UIMenuElementAttributesDestructive;
+    return choice;
+  };
+
+  NSMutableArray<UIMenuElement*>* blockChoices = [NSMutableArray arrayWithObject:blockChoice(@"Whole Site", @"blockedDomains", domain)];
 
   NSString* pageAddress = self.latestRequest.pageAddress;
   if (pageAddress && ![pageAddress isEqualToString:domain])
-  {
-    UIAction* blockPage = [UIAction actionWithTitle:@"This Page Only" image:nil identifier:nil handler:^(UIAction* action) {
-      editTabGuardList(@"blockedURLs", pageAddress, YES);
-      [weakSelf dismiss];
-    }];
-    [blockChoices addObject:blockPage];
-  }
+    [blockChoices addObject:blockChoice(@"This Page Only", @"blockedURLs", pageAddress)];
 
   NSString* targetAddress = self.latestRequest.targetAddress;
   if (targetAddress)
-  {
-    UIAction* blockLink = [UIAction actionWithTitle:@"This Pop-up Link" image:nil identifier:nil handler:^(UIAction* action) {
-      editTabGuardList(@"blockedURLs", targetAddress, YES);
-      [weakSelf dismiss];
-    }];
-    [blockChoices addObject:blockLink];
-  }
-
-  for (UIAction* choice in blockChoices)
-    choice.attributes = UIMenuElementAttributesDestructive;
+    [blockChoices addObject:blockChoice(@"This Pop-up Link", @"blockedURLs", targetAddress)];
 
   UIMenu* block = [UIMenu menuWithTitle:@"Block Pop-ups Silently" image:[UIImage systemImageNamed:@"nosign"] identifier:nil options:0 children:blockChoices];
 
@@ -342,9 +330,9 @@ static CGFloat bottomBarsTop(UIView* host)
 //Safari moves its bars when the device rotates (bottom bars on iPhone portrait, top bar in landscape)
 - (void)orientationDidChange
 {
-  __weak SBPopupBanner* weakSelf = self;
+  __weak TGPopupBanner* weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-    SBPopupBanner* banner = weakSelf;
+    TGPopupBanner* banner = weakSelf;
     UIView* host = banner.superview;
     if (!host)
       return;
@@ -374,7 +362,7 @@ static CGFloat bottomBarsTop(UIView* host)
   if (self.menuVisible)
     return;
 
-  __weak SBPopupBanner* weakSelf = self;
+  __weak TGPopupBanner* weakSelf = self;
   self.hideTimer = [NSTimer scheduledTimerWithTimeInterval:bannerDuration repeats:NO block:^(NSTimer* timer) {
     [weakSelf dismiss];
   }];

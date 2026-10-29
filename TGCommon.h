@@ -9,4 +9,9 @@
 #define TG_EXTERN extern
 #endif
 
-#define SBLog(fmt, ...) NSLog(@"[TabGuard] " fmt, ##__VA_ARGS__)
+//Logging only exists in debug builds (make TABGUARD_DEBUG=1), release builds don't log pop-up URLs
+#if TG_DEBUG
+#define TGLog(fmt, ...) NSLog(@"[TabGuard] " fmt, ##__VA_ARGS__)
+#else
+#define TGLog(fmt, ...) ((void)0)
+#endif

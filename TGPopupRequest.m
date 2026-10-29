@@ -1,37 +1,20 @@
 #import "TGPopupRequest.h"
 #import "TGPrefs.h"
-
-//Strip the scheme (or the "//" left by resourceSpecifier) and a leading "www."
-static NSString* removeJunk(NSString* url)
-{
-  for (NSString* prefix in @[@"https://", @"http://", @"//"])
-  {
-    if ([url hasPrefix:prefix])
-    {
-      url = [url substringFromIndex:prefix.length];
-      break;
-    }
-  }
-
-  if ([url hasPrefix:@"www."])
-    url = [url substringFromIndex:4];
-
-  return url;
-}
+#import "TGPrefsShared.h"
 
 static NSString* normalizedHost(NSString* host)
 {
   if (host.length == 0)
     return nil;
 
-  return removeJunk(host.lowercaseString);
+  return TGStripSchemeAndWWW(host.lowercaseString);
 }
 
 //How specific a matching entry is, the more specific side wins when a pop-up matches both the whitelist and
 //a blocked list: blocked URL > exact domain > wildcard, longer wildcards before shorter ones
-static const NSInteger SBSpecificityWildcard = 1000;
-static const NSInteger SBSpecificityDomain = 2000;
-static const NSInteger SBSpecificityURL = 3000;
+static const NSInteger TGSpecificityWildcard = 1000;
+static const NSInteger TGSpecificityDomain = 2000;
+static const NSInteger TGSpecificityURL = 3000;
 
 //"example.com" only matches itself, "*.example.com" also covers every subdomain like "ads.example.com".
 //Returns the most specific entry matching host, and its specificity (0 when nothing matched).
@@ -50,9 +33,9 @@ static NSString* bestEntryMatchingHost(NSString* host, NSArray* domains, NSInteg
 
     NSInteger score = 0;
     if ([host isEqualToString:domain])
-      score = wildcard ? SBSpecificityWildcard + domain.length : SBSpecificityDomain;
+      score = wildcard ? TGSpecificityWildcard + domain.length : TGSpecificityDomain;
     else if (wildcard && [host hasSuffix:[@"." stringByAppendingString:domain]])
-      score = SBSpecificityWildcard + domain.length;
+      score = TGSpecificityWildcard + domain.length;
 
     if (score > bestScore)
     {
@@ -66,7 +49,7 @@ static NSString* bestEntryMatchingHost(NSString* host, NSArray* domains, NSInteg
   return best;
 }
 
-@implementation SBPopupRequest
+@implementation TGPopupRequest
 @end
 
 //"example.com/path" without scheme, www., query or fragment, so a saved entry still matches when tracking
@@ -81,12 +64,12 @@ static NSString* addressWithoutQuery(NSURL* url)
   return [host stringByAppendingString:path];
 }
 
-SBPopupRequest* popupRequestFor(WKWebView* webView, WKNavigationAction* action)
+TGPopupRequest* popupRequestFor(WKWebView* webView, WKNavigationAction* action)
 {
-  SBPopupRequest* request = [SBPopupRequest new];
+  TGPopupRequest* request = [TGPopupRequest new];
 
   request.pageDomain = normalizedHost(webView.URL.host);
-  request.pageURLWithoutJunk = removeJunk(webView.URL.resourceSpecifier);
+  request.pageURLWithoutJunk = TGStripSchemeAndWWW(webView.URL.resourceSpecifier);
   request.pageAddress = addressWithoutQuery(webView.URL);
 
   WKFrameInfo* sourceFrame = action.sourceFrame;
@@ -100,7 +83,7 @@ SBPopupRequest* popupRequestFor(WKWebView* webView, WKNavigationAction* action)
   if ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"])
   {
     request.targetURL = target;
-    request.targetURLWithoutJunk = removeJunk(target.resourceSpecifier);
+    request.targetURLWithoutJunk = TGStripSchemeAndWWW(target.resourceSpecifier);
     request.targetAddress = addressWithoutQuery(target);
     request.targetDomain = normalizedHost(target.host);
   }
@@ -109,7 +92,7 @@ SBPopupRequest* popupRequestFor(WKWebView* webView, WKNavigationAction* action)
 }
 
 
-SBPopupDecision decisionForPopup(SBPopupRequest* request)
+TGPopupDecision decisionForPopup(TGPopupRequest* request)
 {
   //Whitelist: pop-ups on these pages, or going to these domains (sign-in, payment)
   NSInteger pageAllowScore, targetAllowScore;
@@ -138,10 +121,10 @@ SBPopupDecision decisionForPopup(SBPopupRequest* request)
 
   for (NSString* tempURL in blockedURLs)
   {
-    NSString* blockedURL = removeJunk(tempURL);
+    NSString* blockedURL = TGStripSchemeAndWWW(tempURL);
     if (blockedURL.length && ([request.pageURLWithoutJunk hasPrefix:blockedURL] || [request.targetURLWithoutJunk hasPrefix:blockedURL]))
     {
-      score = SBSpecificityURL + blockedURL.length;
+      score = TGSpecificityURL + blockedURL.length;
       if (score > blockScore)
       {
         blockScore = score;
@@ -156,11 +139,11 @@ SBPopupDecision decisionForPopup(SBPopupRequest* request)
   {
     request.blockingEntry = blockEntry;
     request.blockingListKey = blockListKey;
-    return SBPopupBlocked;
+    return TGPopupBlocked;
   }
 
   if (allowScore > 0)
-    return SBPopupAllow;
+    return TGPopupAllow;
 
-  return SBPopupAsk;
+  return TGPopupAsk;
 }
